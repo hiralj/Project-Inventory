@@ -29,8 +29,8 @@ public class Main {
 		masterView.setPresenter(presenter);
 		
 		masterView.addPanel(inventoryView.getInventoryPanel(), "Inventory", inventoryView);
-		masterView.addPanel(creditView.getCreditPanel(), "Credit", creditView);
-		masterView.addPanel(debitView.getDebitPanel(), "Debit", debitView);
+		masterView.addPanel(creditView.getCreditPanel(), "Purchase", creditView);
+		masterView.addPanel(debitView.getDebitPanel(), "Sales", debitView);
 		
 		
 		GSSModel model = new GSSModel();

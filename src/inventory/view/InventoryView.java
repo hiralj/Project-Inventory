@@ -1,5 +1,6 @@
 package inventory.view;
 
+import inventory.dao.JdbcStock;
 import inventory.presenter.DefaultPresenter;
 
 import java.awt.Component;
@@ -11,17 +12,14 @@ import java.awt.event.ActionListener;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.beans.PropertyChangeEvent;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.text.MessageFormat;
 import java.util.Vector;
 
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.GroupLayout;
+import javax.swing.*;
 import javax.swing.GroupLayout.Alignment;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JTable;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.table.DefaultTableModel;
 
@@ -39,6 +37,7 @@ public class InventoryView extends AbstractViewPane{
 	private JComboBox cbSize2;
 	private JComboBox cbQuality;
 	private JButton btnGetInventory;
+	private JButton btnFullStock;
 	private JLabel lblMaterialSelected;
 	private JScrollPane scrollPaneInventory;
 	private JTable inventoryTable;
@@ -138,6 +137,14 @@ public class InventoryView extends AbstractViewPane{
 				loadInventory();
 			}
 		});
+
+		btnFullStock = new JButton("Complete Stock");
+		btnFullStock.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				completeStock();
+			}
+		});
 		inventoryTable = new JTable();
 		inventoryTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 		inventoryTable.setSize(new Dimension(400, 200));
@@ -159,7 +166,9 @@ public class InventoryView extends AbstractViewPane{
 							.addPreferredGap(ComponentPlacement.RELATED)
 							.addComponent(cbQuality, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE)
 							.addGap(18)
-							.addComponent(btnGetInventory))
+							.addComponent(btnGetInventory)
+							.addGap(18)
+							.addComponent(btnFullStock))
 						.addGroup(gl_inventoryPanel.createSequentialGroup()
 							.addComponent(lblGrade)
 							.addPreferredGap(ComponentPlacement.RELATED)
@@ -200,7 +209,8 @@ public class InventoryView extends AbstractViewPane{
 								.addComponent(cbQuality, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE))
 							.addGap(18)
 							.addComponent(lblMaterialSelected))
-						.addComponent(btnGetInventory))
+						.addComponent(btnGetInventory)
+						.addComponent(btnFullStock))
 					.addGap(18)
 					.addComponent(scrollPaneInventory, GroupLayout.PREFERRED_SIZE, 208, GroupLayout.PREFERRED_SIZE)
 					.addContainerGap(110, Short.MAX_VALUE))
@@ -268,6 +278,90 @@ public class InventoryView extends AbstractViewPane{
 				presenter.loadSize2List(gradeName, shapeName, size);
 			}
 		}
+	}
+
+
+	private JTable generateJTable(ResultSet stockResultSet) throws SQLException {
+		Vector<String> columns = new Vector<>();
+		columns.add("Material");
+		columns.add("Weight (in kg)");
+
+		Vector<Vector<Object>> rows = new Vector<>();
+		while (stockResultSet.next()) {
+			String grade = stockResultSet.getString("grade");
+			String shape = stockResultSet.getString("shape");
+			Float size = stockResultSet.getFloat("size");
+			Float size2 = stockResultSet.getFloat("size2");
+			String material = materialString(grade, shape, size, size2).toString();
+			Float weight = stockResultSet.getFloat("Weight");
+
+			Vector<Object> row = new Vector<>();
+			row.add(material);
+			row.add(weight);
+			rows.add(row);
+		}
+		return new JTable(rows, columns);
+	}
+
+	private JTable generateGenericJTable(ResultSet resultSet) throws SQLException {
+		ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
+		int columnCount = resultSetMetaData.getColumnCount();
+		Vector<String> columns = new Vector<>();
+		Vector<Vector<Object>> rows = new Vector<>();
+		for (int i = 1; i <= columnCount; i++) {
+			columns.add(resultSetMetaData.getColumnName(i));
+		}
+
+		while (resultSet.next()) {
+			Vector<Object> row = new Vector<>();
+			for (int i = 1; i <= columnCount; i++) {
+				row.add(resultSet.getObject(i));
+			}
+			rows.add(row);
+		}
+		JTable table = new JTable(rows, columns);
+		return table;
+	}
+
+
+	private JTable getStock() {
+		try {
+			JdbcStock jdbcStock = new JdbcStock();
+			ResultSet resultSet = jdbcStock.getMaterialStock();
+			return generateJTable(resultSet);
+		} catch (SQLException e) {
+			throw new RuntimeException("SQLException while getting complete stock");
+		}
+	}
+
+	private void completeStock() {
+		JTable table = getStock();
+		JFrame frame = new JFrame("Complete Stock");
+
+		JPanel jPanel = new JPanel();
+		JScrollPane scrollPane = new JScrollPane(table);
+		jPanel.add(scrollPane);
+
+		JButton printButton = new JButton("Print");
+		printButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+		printButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				MessageFormat header = new MessageFormat("Page {0,number,integer}");
+				try {
+					table.print(JTable.PrintMode.FIT_WIDTH, header, null);
+				} catch (java.awt.print.PrinterException exp) {
+					System.err.format("Cannot print %s%n", exp.getMessage());
+				}
+			}
+		});
+		jPanel.add(printButton);
+
+		frame.setContentPane(jPanel);
+		frame.pack();
+		frame.setVisible(true);
+		table.setPreferredScrollableViewportSize(new Dimension(400, 400));
+		table.setFillsViewportHeight(true);
 	}
 	
 	private void loadInventory(){
@@ -352,8 +446,8 @@ public class InventoryView extends AbstractViewPane{
 	private void viewLoadQualityList(){
 		cbQuality.setModel(new DefaultComboBoxModel(DefaultPresenter.QUALITY_LIST));
 	}
-	
-	private void viewLabelMaterialSelected(String grade, String shape, Float size, Float size2, String quality){
+
+	private StringBuilder materialString(String grade, String shape, Float size, Float size2) {
 		StringBuilder sb = new StringBuilder(grade+ " " + shape + " ");
 		if(shape.equals("Square")){
 			if(size == Math.round(size)){
@@ -367,12 +461,12 @@ public class InventoryView extends AbstractViewPane{
 			} else{
 				sb.append(size+"x");
 			}
-			
+
 			if(size2 == Math.round(size2)){
 				sb.append(size2.intValue()+" mm ");
 			} else{
 				sb.append(size2+" mm ");
-			}			
+			}
 		} else{
 			if(size == Math.round(size)){
 				sb.append(size.intValue()+" mm ");
@@ -381,6 +475,11 @@ public class InventoryView extends AbstractViewPane{
 				sb.append(size+" mm ");
 			}
 		}
+		return sb;
+	}
+	
+	private void viewLabelMaterialSelected(String grade, String shape, Float size, Float size2, String quality){
+		StringBuilder sb = materialString(grade, shape, size, size2);
 		sb.append(quality);			
 		lblMaterialSelected.setText(sb.toString());
 	}

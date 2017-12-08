@@ -4,7 +4,7 @@ import java.beans.PropertyChangeEvent;
 
 import javax.swing.JPanel;
 
-public abstract class AbstractViewPane extends JPanel{
+public abstract class AbstractViewPane extends JPanel {
 	/**
 	 * 
 	 */
